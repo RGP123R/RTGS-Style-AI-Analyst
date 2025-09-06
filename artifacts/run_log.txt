@@ -1,0 +1,5 @@
+RTGS Run Log - 2025-09-06T16:58:38.108438
+----------------------------------------
+
+[2025-09-06 16:58:38] INGESTION: Starting data ingestion from local file 'C:/Users/Hemalatha P/Desktop/RTGS/consumption_detail_06_2021_domestic.csv'.
+[2025-09-06 16:58:38] INGESTION: Successfully loaded data. Initial shape: (14005, 11)
