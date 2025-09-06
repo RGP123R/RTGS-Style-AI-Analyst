@@ -2,6 +2,7 @@ import pandas as pd
 import os
 from tabulate import tabulate
 from datetime import datetime
+import json
 
 # --- Agentic Architecture ---
 # 1. Ingestion Agent: Loads data from a local file.
@@ -54,6 +55,92 @@ class IngestAgent:
             self.logger.log(f"INGESTION: Failed to load data. Error: {e}")
             return None
 
+class DataPrepAgent:
+    """Agent for cleaning and standardizing the raw data."""
+    def __init__(self, logger, df):
+        self.logger = logger
+        self.df = df
+
+    def _find_columns(self):
+        """Finds potential geographic and numeric columns by type and name patterns."""
+        geographic_cols = []
+        numeric_cols = []
+        
+        for col in self.df.columns:
+            if self.df[col].dtype == 'object':
+                if self.df[col].nunique() < 50:
+                    geographic_cols.append(col)
+            elif self.df[col].dtype in ['int64', 'float64']:
+                numeric_cols.append(col)
+        
+        return geographic_cols, numeric_cols
+
+    def execute(self):
+        """Performs cleaning and standardization tasks by auto-detecting columns."""
+        self.logger.log("CLEANING & STANDARDIZATION: Starting data preparation with auto-detection.")
+        
+        geographic_cols, numeric_cols = self._find_columns()
+        
+        if not geographic_cols or not numeric_cols:
+            self.logger.log("CLEANING: ERROR: Could not find essential columns for analysis (geographic and/or numeric).")
+            return None
+            
+        self.logger.log(f"CLEANING: Detected geographic columns: {geographic_cols}")
+        self.logger.log(f"CLEANING: Detected numeric columns: {numeric_cols}")
+
+        district_col = geographic_cols[0]
+        self.df.rename(columns={district_col: 'district_name'}, inplace=True)
+        self.df.columns = self.df.columns.str.lower().str.replace(' ', '_')
+        self.logger.log("CLEANING: Renamed a geographic column to 'district_name'.")
+        
+        if 'district_name' in self.df.columns:
+            self.df.drop_duplicates(subset=['district_name'], inplace=True)
+            self.logger.log("CLEANING: Dropped duplicate district entries.")
+
+        for col in numeric_cols:
+            standardized_col = col.lower().replace(' ', '_')
+            if standardized_col in self.df.columns:
+                self.df[standardized_col] = pd.to_numeric(self.df[standardized_col], errors='coerce').fillna(0).astype(int)
+        self.logger.log("CLEANING: Converted detected numerical columns to integer types.")
+        
+        self.logger.log(f"CLEANING: Data is now analysis-ready. Final shape: {self.df.shape}")
+        
+        if not os.path.exists('artifacts'):
+            os.makedirs('artifacts')
+        self.df.to_csv(CLEANED_DATA_FILE, index=False)
+        self.logger.log(f"CLEANING: Cleaned data saved to {CLEANED_DATA_FILE}")
+
+        return self.df
+
+class InsightsAgent:
+    """Agent for generating key insights and analysis."""
+    def __init__(self, logger, df):
+        self.logger = logger
+        self.df = df
+        self.insights = {}
+
+    def execute(self):
+        """Calculates key metrics and stores insights."""
+        self.logger.log("INSIGHTS: Beginning data analysis to find patterns and gaps.")
+        
+        self.logger.log("INSIGHTS: Running generic analysis on available numeric columns.")
+        
+        numeric_cols = self.df.select_dtypes(include=['int64', 'float64']).columns.tolist()
+        
+        if len(numeric_cols) > 1 and 'district_name' in self.df.columns:
+            sample_col = numeric_cols[1]
+            self.insights['sample_insight'] = {
+                'column': sample_col,
+                'highest': self.df.sort_values(by=sample_col, ascending=False).head(3)[['district_name', sample_col]].to_dict('records'),
+                'lowest': self.df.sort_values(by=sample_col, ascending=True).head(3)[['district_name', sample_col]].to_dict('records')
+            }
+            self.logger.log(f"INSIGHTS: Generated a sample insight for column '{sample_col}'.")
+        else:
+            self.logger.log("INSIGHTS: Not enough numeric data columns to generate insights.")
+        
+        self.logger.log("INSIGHTS: All key metrics and insights have been generated.")
+        return self.insights
+        
 def main():
     """Main function to run the sequential agents."""
     logger = Logger(LOG_FILE)
@@ -63,6 +150,21 @@ def main():
     df = ingest_agent.execute()
     if df is None:
         return
+    
+    # Run the Data Preparation Agent
+    prep_agent = DataPrepAgent(logger, df)
+    cleaned_df = prep_agent.execute()
+    if cleaned_df is None:
+        return
+    
+    # Run the Insights Agent
+    insights_agent = InsightsAgent(logger, cleaned_df)
+    insights = insights_agent.execute()
+    
+    # Print a summary of the insights to the console.
+    print("\n--- INSIGHTS AGENT SUMMARY ---")
+    print(json.dumps(insights, indent=4))
+    print("------------------------------\n")
 
 if __name__ == "__main__":
     main()
