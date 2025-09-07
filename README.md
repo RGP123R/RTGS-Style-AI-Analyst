@@ -210,15 +210,3 @@ The pipeline generates:
 This project is open-source. See LICENSE file for details.
 
 ---
-
-## Video Demo
-
-[Link to demo video will be added here]
-
-The demo video shows:
-
-- Repository layout and file structure
-- Installation and setup process
-- Full pipeline execution on sample data
-- Output locations and formats
-- Interactive Streamlit web interface demonstration
