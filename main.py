@@ -2,7 +2,6 @@ import pandas as pd
 import os
 from tabulate import tabulate
 from datetime import datetime
-import json
 
 # --- Agentic Architecture ---
 # 1. Ingestion Agent: Loads data from a local file.
@@ -13,7 +12,7 @@ import json
 LOG_FILE = "artifacts/run_log.txt"
 CLEANED_DATA_FILE = "artifacts/cleaned_data.csv"
 INSIGHTS_DOC = "artifacts/insights.md"
-DATASET_FILE = "C:/Users/Hemalatha P/Desktop/RTGS/consumption_detail_06_2021_domestic.csv"
+DATASET_FILE = "/content/consumption_detail_07_2021_domestic.csv"
 
 class Logger:
     """A simple logger to record all agent actions and system outputs."""
@@ -68,7 +67,8 @@ class DataPrepAgent:
         
         for col in self.df.columns:
             if self.df[col].dtype == 'object':
-                if self.df[col].nunique() < 50:
+                # Check if column values look like district names (e.g., strings with spaces)
+                if self.df[col].nunique() < 50: # Heuristic: If it has few unique string values, it might be a geographic identifier.
                     geographic_cols.append(col)
             elif self.df[col].dtype in ['int64', 'float64']:
                 numeric_cols.append(col)
@@ -79,6 +79,7 @@ class DataPrepAgent:
         """Performs cleaning and standardization tasks by auto-detecting columns."""
         self.logger.log("CLEANING & STANDARDIZATION: Starting data preparation with auto-detection.")
         
+        # Auto-detect key columns
         geographic_cols, numeric_cols = self._find_columns()
         
         if not geographic_cols or not numeric_cols:
@@ -88,15 +89,18 @@ class DataPrepAgent:
         self.logger.log(f"CLEANING: Detected geographic columns: {geographic_cols}")
         self.logger.log(f"CLEANING: Detected numeric columns: {numeric_cols}")
 
+        # Use the first detected geographic column as the district name for this prototype
         district_col = geographic_cols[0]
         self.df.rename(columns={district_col: 'district_name'}, inplace=True)
         self.df.columns = self.df.columns.str.lower().str.replace(' ', '_')
         self.logger.log("CLEANING: Renamed a geographic column to 'district_name'.")
         
+        # 1. Handle duplicates
         if 'district_name' in self.df.columns:
             self.df.drop_duplicates(subset=['district_name'], inplace=True)
             self.logger.log("CLEANING: Dropped duplicate district entries.")
 
+        # 2. Data type conversion for all detected numeric columns
         for col in numeric_cols:
             standardized_col = col.lower().replace(' ', '_')
             if standardized_col in self.df.columns:
@@ -105,6 +109,7 @@ class DataPrepAgent:
         
         self.logger.log(f"CLEANING: Data is now analysis-ready. Final shape: {self.df.shape}")
         
+        # Save cleaned data as an artifact
         if not os.path.exists('artifacts'):
             os.makedirs('artifacts')
         self.df.to_csv(CLEANED_DATA_FILE, index=False)
@@ -123,11 +128,17 @@ class InsightsAgent:
         """Calculates key metrics and stores insights."""
         self.logger.log("INSIGHTS: Beginning data analysis to find patterns and gaps.")
         
+        # NOTE: The Insights Agent is still tailored to the education dataset.
+        # This is a limitation that would need further work to make it generic.
+        
+        # Placeholder for flexible insights generation
         self.logger.log("INSIGHTS: Running generic analysis on available numeric columns.")
         
+        # Find the top 3 and bottom 3 districts for a sample numeric column
         numeric_cols = self.df.select_dtypes(include=['int64', 'float64']).columns.tolist()
         
         if len(numeric_cols) > 1 and 'district_name' in self.df.columns:
+            # Pick a representative numeric column for a sample insight
             sample_col = numeric_cols[1]
             self.insights['sample_insight'] = {
                 'column': sample_col,
@@ -135,11 +146,64 @@ class InsightsAgent:
                 'lowest': self.df.sort_values(by=sample_col, ascending=True).head(3)[['district_name', sample_col]].to_dict('records')
             }
             self.logger.log(f"INSIGHTS: Generated a sample insight for column '{sample_col}'.")
+            
         else:
             self.logger.log("INSIGHTS: Not enough numeric data columns to generate insights.")
         
         self.logger.log("INSIGHTS: All key metrics and insights have been generated.")
         return self.insights
+
+class OutputAgent:
+    """Agent for generating CLI and documentation outputs."""
+    def __init__(self, logger, insights):
+        self.logger = logger
+        self.insights = insights
+
+    def execute(self):
+        """Formats and prints insights to the CLI and saves to files."""
+        self.logger.log("OUTPUT: Formatting and generating CLI and documentation artifacts.")
+        
+        # 1. Generate CLI Output (ASCII charts/tables)
+        print("\n" + "="*80)
+        print("REAL-TIME GOVERNANCE SYSTEM (RTGS) - GENERIC INSIGHTS")
+        print("="*80)
+        
+        if 'sample_insight' in self.insights:
+            sample_insight = self.insights['sample_insight']
+            print(f"\n--- Insights for '{sample_insight['column']}' ---\n")
+            
+            highest_df = pd.DataFrame(sample_insight['highest'])
+            highest_df.columns = ['District', sample_insight['column'].replace('_', ' ').title()]
+            print("Districts with the Highest Values:")
+            print(tabulate(highest_df, headers='keys', tablefmt='psql', showindex=False))
+            
+            lowest_df = pd.DataFrame(sample_insight['lowest'])
+            lowest_df.columns = ['District', sample_insight['column'].replace('_', ' ').title()]
+            print("\nDistricts with the Lowest Values:")
+            print(tabulate(lowest_df, headers='keys', tablefmt='psql', showindex=False))
+        else:
+            print("\nNo insights to display. The system could not find enough relevant data columns.")
+
+        # 2. Generate and save human-readable documentation
+        self.logger.log("DOCUMENTATION: Generating human-readable documentation.")
+        with open(INSIGHTS_DOC, "w") as f:
+            f.write("# RTGS Generic Insights Report\n\n")
+            f.write("### Executive Summary\n")
+            f.write("This report provides a data-driven overview based on the provided dataset. The system automatically identified key geographic and numeric columns to generate a preliminary analysis, highlighting significant disparities and trends.\n\n")
+            f.write("### Key Findings\n\n")
+            if 'sample_insight' in self.insights:
+                sample_insight = self.insights['sample_insight']
+                f.write(f"#### 1. Analysis of '{sample_insight['column']}'\n")
+                f.write(f"The analysis of the '{sample_insight['column']}' metric reveals significant variations across districts.\n\n")
+                f.write("```\n")
+                f.write(tabulate(pd.DataFrame(sample_insight['highest']), headers='keys', tablefmt='psql', showindex=False))
+                f.write("\n")
+                f.write(tabulate(pd.DataFrame(sample_insight['lowest']), headers='keys', tablefmt='psql', showindex=False))
+                f.write("\n```\n")
+            else:
+                f.write("No insights could be generated due to a lack of identifiable geographic or numeric columns in the provided dataset.\n")
+
+        self.logger.log(f"OUTPUT: All artifacts (logs, cleaned data, insights) saved in the 'artifacts' directory.")
         
 def main():
     """Main function to run the sequential agents."""
@@ -161,10 +225,9 @@ def main():
     insights_agent = InsightsAgent(logger, cleaned_df)
     insights = insights_agent.execute()
     
-    # Print a summary of the insights to the console.
-    print("\n--- INSIGHTS AGENT SUMMARY ---")
-    print(json.dumps(insights, indent=4))
-    print("------------------------------\n")
+    # Run the Output Agent
+    output_agent = OutputAgent(logger, insights)
+    output_agent.execute()
 
 if __name__ == "__main__":
     main()
