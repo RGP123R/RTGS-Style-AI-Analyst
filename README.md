@@ -213,7 +213,7 @@ This project is open-source. See LICENSE file for details.
 
 ## Video Demo
 
-https://drive.google.com/drive/folders/1ANRparSWVuzyq5PmGTZ9SGs4IFW-3dM_
+[https://drive.google.com/drive/folders/1ANRparSWVuzyq5PmGTZ9SGs4IFW-3dM_](https://drive.google.com/file/d/1i0hNHq3vkVfGVwqXi2n7bZ1auXZU28mT/view?usp=drive_link)
 
 The demo video shows:
 
